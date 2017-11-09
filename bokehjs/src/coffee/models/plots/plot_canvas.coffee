@@ -472,7 +472,7 @@ export class PlotCanvasView extends DOMView
 
   connect_signals: () ->
     super()
-    @connect(@force_paint, () => @paint())
+    @connect(@force_paint, () => if @_needs_layout() then @parent.layout() else @paint())
     for name, rng of @model.frame.x_ranges
       @connect(rng.change, () -> @request_render())
     for name, rng of @model.frame.y_ranges
@@ -516,6 +516,16 @@ export class PlotCanvasView extends DOMView
 
     @solver.update_variables()
 
+  _needs_layout: () ->
+    for _, view of @renderer_views
+      panel = view.model.panel
+      if panel?
+        sizeable = if panel.is_horizontal then panel._height else panel._width
+        if Math.round(sizeable.value) != Math.round(view._get_size())
+          return true
+
+    return false
+
   # XXX: bacause PlotCanvas is NOT a LayoutDOM
   _layout: (final=false) ->
     @render()
@@ -528,7 +538,10 @@ export class PlotCanvasView extends DOMView
         layout_height: Math.round(@canvas._height.value)
       }, {no_change: true})
 
-      @request_paint()
+      # XXX: can't be @request_paint(), because it would trigger back-and-forth
+      # layout recomputing feedback loop between plots. Plots are also much more
+      # responsive this way, especially in interactive mode.
+      @paint()
 
   has_finished: () ->
     if not super()
